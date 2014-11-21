@@ -29,6 +29,7 @@ import java.lang.ref.WeakReference;
 import javax.obex.ClientSession;
 import javax.obex.HeaderSet;
 import javax.obex.ObexTransport;
+import javax.obex.ObexHelper;
 import javax.obex.ResponseCodes;
 
 class BluetoothMasObexClientSession {
@@ -116,6 +117,26 @@ class BluetoothMasObexClientSession {
     public boolean makeRequest(BluetoothMasRequest request) {
         if (DBG) Log.d(TAG, "makeRequest called with: " + request);
 
+        if (((BluetoothMapTransport)mTransport).isSrmSupported()) {
+            Log.d(TAG, "Client is srm capable");
+            if (request instanceof BluetoothMasRequestGetFolderListing ||
+                request instanceof BluetoothMasRequestGetFolderListingSize ||
+                request instanceof BluetoothMasRequestGetMessagesListing ||
+                request instanceof BluetoothMasRequestGetMessage ||
+                request instanceof BluetoothMasRequestPushMessage ||
+                request instanceof BluetoothMasRequestGetMessagesListingSize) {
+                mSession.setLocalSrmStatus(true);
+            }
+
+            if (request instanceof BluetoothMasRequestSetMessageStatus ||
+                request instanceof BluetoothMasRequestUpdateInbox||
+                request instanceof BluetoothMasRequestSetNotificationRegistration) {
+                mSession.setLocalSrmStatus(false);
+            }
+        } else {
+                Log.d(TAG, "Client is not srm capable");
+        }
+
         boolean status = mHandler.sendMessage(mHandler.obtainMessage(REQUEST, request));
         if (!status) {
             Log.e(TAG, "Adding messages failed, state: " + mConnected);
@@ -153,6 +174,7 @@ class BluetoothMasObexClientSession {
 
     private void disconnect() {
         if (mSession != null) {
+            Log.w(TAG, "disconnect: ");
             try {
                 mSession.disconnect(null);
             } catch (IOException e) {
@@ -161,6 +183,7 @@ class BluetoothMasObexClientSession {
             try {
                 mSession.close();
             } catch (IOException e) {
+                Log.w(TAG, "handled disconnect exception:", e);
             }
         }
 
