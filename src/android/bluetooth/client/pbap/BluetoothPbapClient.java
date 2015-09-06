@@ -17,6 +17,7 @@
 package android.bluetooth.client.pbap;
 
 import android.accounts.Account;
+import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.os.Handler;
 import android.os.Message;
@@ -382,6 +383,10 @@ public class BluetoothPbapClient {
 
     private SessionHandler mSessionHandler;
 
+    private static final int SDP_PBAP_PCE_VERSION = 0x0101;
+    private int mPceSdpHandle = -1;;
+    private static BluetoothAdapter mAdapter = BluetoothAdapter.getDefaultAdapter();
+
     private static class SessionHandler extends Handler {
 
         private final WeakReference<BluetoothPbapClient> mClient;
@@ -526,6 +531,8 @@ public class BluetoothPbapClient {
 
         mSessionHandler = new SessionHandler(this);
 
+        addSdp();
+
         mSession = new BluetoothPbapSession(device, mSessionHandler);
     }
 
@@ -535,6 +542,33 @@ public class BluetoothPbapClient {
      */
     public void connect() {
         mSession.start();
+    }
+
+    /**
+     * Add the SDP record for PBAP Client
+     */
+    public void addSdp() {
+        Log.d(TAG, "addSdp");
+        if(mPceSdpHandle >= 0) {
+            Log.d(TAG, "Removing PCE SDP record: " + mPceSdpHandle);
+            mAdapter.removeSdpRecord(mPceSdpHandle);
+            mPceSdpHandle = -1;
+        }
+        mPceSdpHandle = mAdapter.createPbapPceSdpRecord("Phonebook Access Client Service",
+                SDP_PBAP_PCE_VERSION);
+    }
+
+
+    /**
+     * removes the SDP record for PBAP Client
+     */
+    public void removeSdp() {
+        Log.d(TAG, "removeSdp");
+        if(mPceSdpHandle >= 0) {
+            Log.d(TAG, "Removing PCE SDP record: " + mPceSdpHandle);
+            mAdapter.removeSdpRecord(mPceSdpHandle);
+            mPceSdpHandle = -1;
+        }
     }
 
     @Override
