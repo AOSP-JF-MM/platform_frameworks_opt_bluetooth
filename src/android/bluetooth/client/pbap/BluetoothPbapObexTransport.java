@@ -29,10 +29,12 @@ import javax.obex.ObexTransport;
 class BluetoothPbapObexTransport implements ObexTransport {
 
     private BluetoothSocket mSocket = null;
+    final int mType;
 
-    public BluetoothPbapObexTransport(BluetoothSocket rfs) {
+    public BluetoothPbapObexTransport(BluetoothSocket rfs, int type) {
         super();
         mSocket = rfs;
+        mType = type;
     }
 
     @Override
@@ -93,6 +95,6 @@ class BluetoothPbapObexTransport implements ObexTransport {
 
     @Override
     public boolean isSrmSupported() {
-        return false;
+        return mType == BluetoothSocket.TYPE_L2CAP;
     }
 }

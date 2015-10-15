@@ -25,6 +25,12 @@ import javax.obex.ClientSession;
 import javax.obex.HeaderSet;
 import javax.obex.ObexTransport;
 import javax.obex.ResponseCodes;
+import android.bluetooth.SdpPseRecord;
+import android.bluetooth.BluetoothSocket;
+import android.bluetooth.client.pbap.utils.ObexAppParameters;
+import android.bluetooth.client.pbap.BluetoothPbapRequest;
+
+
 
 final class BluetoothPbapObexSession {
     private static final String TAG = "BluetoothPbapObexSession";
@@ -32,6 +38,11 @@ final class BluetoothPbapObexSession {
     private static final byte[] PBAP_TARGET = new byte[] {
             0x79, 0x61, 0x35, (byte) 0xf0, (byte) 0xf0, (byte) 0xc5, 0x11, (byte) 0xd8, 0x09, 0x66,
             0x08, 0x00, 0x20, 0x0c, (byte) 0x9a, 0x66
+    };
+
+    // the below implies support for downloading and browsing.
+    private static final byte[] PBAP_SUPPORTED_FEATURE = new byte[] {
+            0x00, 0x00, 0x00, (byte) 0x03
     };
 
     final static int OBEX_SESSION_CONNECTED = 100;
@@ -43,12 +54,14 @@ final class BluetoothPbapObexSession {
     final static int OBEX_SESSION_AUTHENTICATION_TIMEOUT = 106;
 
     private Handler mSessionHandler;
-    private final ObexTransport mTransport;
+    private final BluetoothPbapObexTransport mTransport;
     private ObexClientThread mObexClientThread;
     private BluetoothPbapObexAuthenticator mAuth = null;
+    private final SdpPseRecord mPse;
 
-    public BluetoothPbapObexSession(ObexTransport transport) {
+    public BluetoothPbapObexSession(BluetoothPbapObexTransport transport, SdpPseRecord pse ) {
         mTransport = transport;
+        mPse = pse;
     }
 
     public void start(Handler handler) {
@@ -219,6 +232,15 @@ final class BluetoothPbapObexSession {
 
             HeaderSet hs = new HeaderSet();
             hs.setHeader(HeaderSet.TARGET, PBAP_TARGET);
+            Log.d(TAG,"mPse.getSupportedFeatures() "+mPse.getSupportedFeatures());
+            if (mPse != null && mPse.getSupportedFeatures() != java.nio.ByteBuffer.
+                         wrap(PBAP_SUPPORTED_FEATURE).getInt() && mTransport.mType ==
+                        BluetoothSocket.TYPE_L2CAP) {
+                ObexAppParameters oap = new ObexAppParameters();
+                oap.add(BluetoothPbapRequest.OAP_TAGID_PBAP_SUPPORTED_FEATURES,
+                    PBAP_SUPPORTED_FEATURE);
+                oap.addToHeaderSet(hs);
+            }
 
             try {
                 hs = mClientSession.connect(hs);
