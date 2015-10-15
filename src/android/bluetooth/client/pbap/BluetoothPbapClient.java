@@ -19,6 +19,7 @@ package android.bluetooth.client.pbap;
 import android.accounts.Account;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.SdpPseRecord;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;
@@ -383,7 +384,7 @@ public class BluetoothPbapClient {
 
     private SessionHandler mSessionHandler;
 
-    private static final int SDP_PBAP_PCE_VERSION = 0x0101;
+    private static final int SDP_PBAP_PCE_VERSION = 0x0102;
     private int mPceSdpHandle = -1;;
     private static BluetoothAdapter mAdapter = BluetoothAdapter.getDefaultAdapter();
 
@@ -515,6 +516,33 @@ public class BluetoothPbapClient {
      * @param account the account to which contacts will be added {@see #pullPhoneBook}.
      * @param handler the handle that will be used by PCE to notify events and
      *            results to application
+     * @param pse the pbap server sdp record
+     * @throws NullPointerException
+     */
+    public BluetoothPbapClient(BluetoothDevice device, Handler handler, SdpPseRecord pse) {
+        if (device == null) {
+            throw new NullPointerException("BluetothDevice is null");
+        }
+
+        mClientHandler = handler;
+
+        mAccount = null;
+
+        mSessionHandler = new SessionHandler(this);
+
+        addSdp();
+
+        mSession = new BluetoothPbapSession(device, mSessionHandler, pse);
+    }
+
+
+    /**
+     * Constructs PCE object
+     *
+     * @param device BluetoothDevice that corresponds to remote acting in PSE
+     *            role
+     * @param handler the handle that will be used by PCE to notify events and
+     *            results to application
      * @throws NullPointerException
      */
     public BluetoothPbapClient(BluetoothDevice device, Account account, Handler handler) {
@@ -541,7 +569,16 @@ public class BluetoothPbapClient {
      * session and waits for requests to be transfered to PSE.
      */
     public void connect() {
+        Log.d(TAG, "connect");
         mSession.start();
+    }
+
+    /**
+     * set sdp record for pbap server
+     */
+    public void setPseRec ( SdpPseRecord pse) {
+           Log.d( TAG,"setPseRec");
+           mSession.setPseRec(pse);
     }
 
     /**
@@ -582,6 +619,7 @@ public class BluetoothPbapClient {
      * Stops all the active transactions and disconnects from the server.
      */
     public void disconnect() {
+        Log.d(TAG, "disconnect");
         mSession.stop();
     }
 
@@ -589,6 +627,7 @@ public class BluetoothPbapClient {
      * Aborts current request, if any
      */
     public void abort() {
+        Log.d(TAG, "abort");
         mSession.abort();
     }
 
@@ -618,6 +657,7 @@ public class BluetoothPbapClient {
      *         {@link #EVENT_SET_PHONE_BOOK_ERROR} in case of failure
      */
     public boolean setPhoneBookFolderUp() {
+        Log.d(TAG, "pullPhoneBookSize");
         BluetoothPbapRequest req = new BluetoothPbapRequestSetPath(true);
         return mSession.makeRequest(req);
     }
@@ -632,6 +672,7 @@ public class BluetoothPbapClient {
      *         {@link #EVENT_SET_PHONE_BOOK_ERROR} in case of failure
      */
     public boolean setPhoneBookFolderDown(String folder) {
+        Log.d(TAG, "pullPhoneBookSize");
         BluetoothPbapRequest req = new BluetoothPbapRequestSetPath(folder);
         return mSession.makeRequest(req);
     }
@@ -646,6 +687,7 @@ public class BluetoothPbapClient {
      *         {@link #EVENT_PULL_PHONE_BOOK_SIZE_ERROR} in case of failure
      */
     public boolean pullPhoneBookSize(String pbName) {
+        Log.d(TAG, "pullPhoneBookSize");
         BluetoothPbapRequestPullPhoneBookSize req = new BluetoothPbapRequestPullPhoneBookSize(
                 pbName);
 
@@ -662,6 +704,7 @@ public class BluetoothPbapClient {
      *         {@link #EVENT_PULL_VCARD_LISTING_SIZE_ERROR} in case of failure
      */
     public boolean pullVcardListingSize(String folder) {
+        Log.d(TAG, "pullVcardListingSize");
         BluetoothPbapRequestPullVcardListingSize req = new BluetoothPbapRequestPullVcardListingSize(
                 folder);
 
@@ -681,6 +724,7 @@ public class BluetoothPbapClient {
      *         {@link #EVENT_PULL_PHONE_BOOK_ERROR} in case of failure
      */
     public boolean pullPhoneBook(String pbName) {
+        Log.d(TAG, "pullPhoneBook");
         return pullPhoneBook(pbName, 0, VCARD_TYPE_21, 0, 0);
     }
 
@@ -698,6 +742,7 @@ public class BluetoothPbapClient {
      *         {@link #EVENT_PULL_PHONE_BOOK_ERROR} in case of failure
      */
     public boolean pullPhoneBook(String pbName, long filter, byte format) {
+        Log.d(TAG, "pullPhoneBook");
         return pullPhoneBook(pbName, filter, format, 0, 0);
     }
 
@@ -720,6 +765,7 @@ public class BluetoothPbapClient {
      *         {@link #EVENT_PULL_PHONE_BOOK_ERROR} in case of failure
      */
     public boolean pullPhoneBook(String pbName, int maxListCount, int listStartOffset) {
+        Log.d(TAG, "pullPhoneBook");
         return pullPhoneBook(pbName, 0, VCARD_TYPE_21, maxListCount, listStartOffset);
     }
 
@@ -740,6 +786,7 @@ public class BluetoothPbapClient {
      */
     public boolean pullPhoneBook(String pbName, long filter, byte format, int maxListCount,
             int listStartOffset) {
+        Log.d(TAG, "pullPhoneBook");
         BluetoothPbapRequest req = new BluetoothPbapRequestPullPhoneBook(
                 pbName, mAccount, filter, format, maxListCount, listStartOffset);
         return mSession.makeRequest(req);
@@ -757,6 +804,7 @@ public class BluetoothPbapClient {
      *         {@link #EVENT_PULL_VCARD_LISTING_ERROR} in case of failure
      */
     public boolean pullVcardListing(String folder) {
+        Log.d(TAG, "pullVcardListing");
         return pullVcardListing(folder, ORDER_BY_DEFAULT, SEARCH_ATTR_NAME, null, 0, 0);
     }
 
@@ -771,6 +819,7 @@ public class BluetoothPbapClient {
      *         {@link #EVENT_PULL_VCARD_LISTING_ERROR} in case of failure
      */
     public boolean pullVcardListing(String folder, byte order) {
+        Log.d(TAG, "pullVcardListing");
         return pullVcardListing(folder, order, SEARCH_ATTR_NAME, null, 0, 0);
     }
 
@@ -790,6 +839,7 @@ public class BluetoothPbapClient {
      *         {@link #EVENT_PULL_VCARD_LISTING_ERROR} in case of failure
      */
     public boolean pullVcardListing(String folder, byte searchAttr, String searchVal) {
+        Log.d(TAG, "pullVcardListing");
         return pullVcardListing(folder, ORDER_BY_DEFAULT, searchAttr, searchVal, 0, 0);
     }
 
@@ -808,6 +858,7 @@ public class BluetoothPbapClient {
      */
     public boolean pullVcardListing(String folder, byte order, int maxListCount,
             int listStartOffset) {
+        Log.d(TAG, "pullVcardListing");
         return pullVcardListing(folder, order, SEARCH_ATTR_NAME, null, maxListCount,
                 listStartOffset);
     }
@@ -825,6 +876,7 @@ public class BluetoothPbapClient {
      *         {@link #EVENT_PULL_VCARD_LISTING_ERROR} in case of failure
      */
     public boolean pullVcardListing(String folder, int maxListCount, int listStartOffset) {
+        Log.d(TAG, "pullVcardListing");
         return pullVcardListing(folder, ORDER_BY_DEFAULT, SEARCH_ATTR_NAME, null, maxListCount,
                 listStartOffset);
     }
@@ -848,6 +900,7 @@ public class BluetoothPbapClient {
      */
     public boolean pullVcardListing(String folder, byte order, byte searchAttr,
             String searchVal, int maxListCount, int listStartOffset) {
+        Log.d(TAG, "pullVcardListing searchVal is "+searchVal);
         BluetoothPbapRequest req = new BluetoothPbapRequestPullVcardListing(folder, order,
                 searchAttr, searchVal, maxListCount, listStartOffset);
         return mSession.makeRequest(req);
@@ -863,6 +916,7 @@ public class BluetoothPbapClient {
      * @link #EVENT_PULL_VCARD_ERROR} in case of failure
      */
     public boolean pullVcardEntry(String handle) {
+        Log.d(TAG, "pullVcardEntry");
         return pullVcardEntry(handle, (byte) 0, VCARD_TYPE_21);
     }
 
@@ -879,6 +933,7 @@ public class BluetoothPbapClient {
      * @link #EVENT_PULL_VCARD_ERROR} in case of failure
      */
     public boolean pullVcardEntry(String handle, long filter, byte format) {
+        Log.d(TAG, "pullVcardEntry");
         BluetoothPbapRequest req =
                 new BluetoothPbapRequestPullVcardEntry(handle, mAccount, filter, format);
         return mSession.makeRequest(req);

@@ -19,6 +19,7 @@ package android.bluetooth.client.pbap;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
+import android.bluetooth.SdpPseRecord;
 import android.os.Handler;
 import android.os.Handler.Callback;
 import android.os.HandlerThread;
@@ -33,8 +34,8 @@ class BluetoothPbapSession implements Callback {
     private static final String TAG = "android.bluetooth.client.pbap.BluetoothPbapSession";
 
     /* local use only */
-    private static final int RFCOMM_CONNECTED = 1;
-    private static final int RFCOMM_FAILED = 2;
+    private static final int SOCKET_CONNECTED = 1;
+    private static final int SOCKET_CONNECT_FAILED = 2;
 
     /* to BluetoothPbapClient */
     public static final int REQUEST_COMPLETED = 3;
@@ -48,6 +49,7 @@ class BluetoothPbapSession implements Callback {
     public static final int ACTION_LISTING = 14;
     public static final int ACTION_VCARD = 15;
     public static final int ACTION_PHONEBOOK_SIZE = 16;
+    private static final int L2CAP_INVALID_PSM = -1;
 
     private static final String PBAP_UUID =
             "0000112f-0000-1000-8000-00805f9b34fb";
@@ -60,8 +62,9 @@ class BluetoothPbapSession implements Callback {
     private final HandlerThread mHandlerThread;
     private final Handler mSessionHandler;
 
-    private RfcommConnectThread mConnectThread;
+    private SocketConnectThread mConnectThread;
     private BluetoothPbapObexTransport mTransport;
+    private SdpPseRecord mPse;
 
     private BluetoothPbapObexSession mObexSession;
 
@@ -86,12 +89,32 @@ class BluetoothPbapSession implements Callback {
         mSessionHandler = new Handler(mHandlerThread.getLooper(), this);
     }
 
+    public BluetoothPbapSession(BluetoothDevice device, Handler handler, SdpPseRecord pse) {
+
+        mAdapter = BluetoothAdapter.getDefaultAdapter();
+        if (mAdapter == null) {
+            throw new NullPointerException("No Bluetooth adapter in the system");
+        }
+
+        mDevice = device;
+        mParentHandler = handler;
+        mConnectThread = null;
+        mTransport = null;
+        mObexSession = null;
+        mPse = pse;
+
+        mHandlerThread = new HandlerThread("PBAP session handler",
+                Process.THREAD_PRIORITY_BACKGROUND);
+        mHandlerThread.start();
+        mSessionHandler = new Handler(mHandlerThread.getLooper(), this);
+    }
+
     @Override
     public boolean handleMessage(Message msg) {
         Log.d(TAG, "Handler: msg: " + msg.what);
 
         switch (msg.what) {
-            case RFCOMM_FAILED:
+            case SOCKET_CONNECT_FAILED:
                 mConnectThread = null;
 
                 mParentHandler.obtainMessage(SESSION_DISCONNECTED).sendToTarget();
@@ -102,7 +125,7 @@ class BluetoothPbapSession implements Callback {
                 }
                 break;
 
-            case RFCOMM_CONNECTED:
+            case SOCKET_CONNECTED:
                 mConnectThread = null;
                 mTransport = (BluetoothPbapObexTransport) msg.obj;
                 startObexSession();
@@ -130,7 +153,7 @@ class BluetoothPbapSession implements Callback {
 
             case BluetoothPbapObexSession.OBEX_SESSION_DISCONNECTED:
                 mParentHandler.obtainMessage(SESSION_DISCONNECTED).sendToTarget();
-                stopRfcomm();
+                stopSocketConnect();
                 break;
 
             case BluetoothPbapObexSession.OBEX_SESSION_REQUEST_COMPLETED:
@@ -171,7 +194,7 @@ class BluetoothPbapSession implements Callback {
     public void start() {
         Log.d(TAG, "start");
 
-        startRfcomm();
+        startSocketConnect();
     }
 
     public void stop() {
@@ -194,6 +217,10 @@ class BluetoothPbapSession implements Callback {
         }
     }
 
+    public void setPseRec(SdpPseRecord pse) {
+        Log.d(TAG,"setPseRec "+ pse.getL2capPsm());
+        mPse = pse;
+    }
     public boolean makeRequest(BluetoothPbapRequest request) {
         Log.v(TAG, "makeRequest: " + request.getClass().getSimpleName());
 
@@ -210,7 +237,8 @@ class BluetoothPbapSession implements Callback {
              * assume that RFCOMM does not exist either and we should start
              * connecting it
              */
-            startRfcomm();
+
+            startSocketConnect();
 
             return true;
         }
@@ -232,13 +260,13 @@ class BluetoothPbapSession implements Callback {
         return mObexSession.setAuthReply(key);
     }
 
-    private void startRfcomm() {
-        Log.d(TAG, "startRfcomm");
+    private void startSocketConnect() {
+        Log.d(TAG, "startSocketConnect");
 
         if (mConnectThread == null && mObexSession == null) {
             mParentHandler.obtainMessage(SESSION_CONNECTING).sendToTarget();
 
-            mConnectThread = new RfcommConnectThread();
+            mConnectThread = new SocketConnectThread();
             mConnectThread.start();
         }
 
@@ -248,8 +276,8 @@ class BluetoothPbapSession implements Callback {
          */
     }
 
-    private void stopRfcomm() {
-        Log.d(TAG, "stopRfcomm");
+    private void stopSocketConnect() {
+        Log.d(TAG, "stopSocketConnect");
 
         if (mConnectThread != null) {
             try {
@@ -277,7 +305,7 @@ class BluetoothPbapSession implements Callback {
     private void startObexSession() {
         Log.d(TAG, "startObexSession");
 
-        mObexSession = new BluetoothPbapObexSession(mTransport);
+        mObexSession = new BluetoothPbapObexSession(mTransport, mPse);
         mObexSession.start(mSessionHandler);
     }
 
@@ -290,13 +318,13 @@ class BluetoothPbapSession implements Callback {
         }
     }
 
-    private class RfcommConnectThread extends Thread {
-        private static final String TAG = "RfcommConnectThread";
+    private class SocketConnectThread extends Thread {
+        private static final String TAG = "SocketConnectThread";
 
         private BluetoothSocket mSocket;
 
-        public RfcommConnectThread() {
-            super("RfcommConnectThread");
+        public SocketConnectThread() {
+            super("SocketConnectThread");
         }
 
         @Override
@@ -305,19 +333,56 @@ class BluetoothPbapSession implements Callback {
                 mAdapter.cancelDiscovery();
             }
 
-            try {
-                mSocket = mDevice.createRfcommSocketToServiceRecord(UUID.fromString(PBAP_UUID));
-                mSocket.connect();
-
-                BluetoothPbapObexTransport transport;
-                transport = new BluetoothPbapObexTransport(mSocket);
-
-                mSessionHandler.obtainMessage(RFCOMM_CONNECTED, transport).sendToTarget();
-            } catch (IOException e) {
+            int btPseTransportType;
+            if (connectL2capSocket())
+                btPseTransportType = BluetoothSocket.TYPE_L2CAP;
+            else if (connectRfcommSocket())
+                btPseTransportType = BluetoothSocket.TYPE_RFCOMM;
+            else
+            {
                 closeSocket();
-                mSessionHandler.obtainMessage(RFCOMM_FAILED).sendToTarget();
+                mSessionHandler.obtainMessage(SOCKET_CONNECT_FAILED).sendToTarget();
+                return;
             }
 
+            BluetoothPbapObexTransport transport;
+            transport = new BluetoothPbapObexTransport(mSocket,btPseTransportType);
+            Log.e(TAG, "posting SOCKET_CONNECTED");
+            mSessionHandler.obtainMessage(SOCKET_CONNECTED, transport).sendToTarget();
+        }
+
+        private boolean connectL2capSocket() {
+            try {
+                /* Use BluetoothSocket to connect */
+                Log.v(TAG,"connectL2capSocket: PSM: " + mPse.getL2capPsm());
+                if (mPse.getL2capPsm() != L2CAP_INVALID_PSM) {
+                    mSocket = mDevice.createL2capSocket(mPse.getL2capPsm());
+                    mSocket.connect();
+                    Log.d(TAG,"l2cap socket connected ");
+                } else {
+                    return false;
+                }
+
+            } catch (IOException e) {
+                Log.e(TAG, "Error while connecting L2cap socket", e);
+                return false;
+            }
+            return true;
+        }
+
+        private boolean connectRfcommSocket() {
+            try {
+                /* Use BluetoothSocket to connect */
+                Log.v(TAG,"connectRfcommSocket: channel: " + mPse.getRfcommChannelNumber());
+                mSocket = mDevice.createRfcommSocket(mPse.getRfcommChannelNumber());
+                mSocket.connect();
+                Log.v(TAG,"rfcomm socket connected ");
+            } catch (IOException e) {
+                Log.e(TAG, "Error while connecting rfcomm socket", e);
+                closeSocket();
+                return false;
+            }
+            return true;
         }
 
         // This method may be called from outside the thread if the connect() call above is stuck.
